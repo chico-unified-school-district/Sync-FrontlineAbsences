@@ -248,6 +248,7 @@ function Add-MissingAbsenceEvents {
 Import-Module CommonScriptFunctions
 Show-BlockInfo Start
 Import-Module dbatools
+Import-Module Microsoft.Graph.Authentication -RequiredVersion 2.41.2 -Force
 # Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph
 # Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent, Remove-MgUserEvent
 
