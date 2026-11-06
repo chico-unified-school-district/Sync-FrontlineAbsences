@@ -138,6 +138,24 @@ function Add-MissingAbsenceEvents {
   [switch]$WhatIf
  )
 
+ $categoryPath = Join-Path $PSScriptRoot 'lib\color_categories.csv'
+ $categoryRows = @(Import-Csv -LiteralPath $categoryPath -ErrorAction Stop)
+ $categoriesByReason = @{}
+ foreach ($categoryRow in $categoryRows) {
+  $categoryReason = ([string]$categoryRow.absence_reason -replace '\s+', ' ').Trim()
+  $categoryName = ([string]$categoryRow.default_category).Trim()
+  if (-not $categoryReason -or -not $categoryName) {
+   throw "Invalid absence reason or category in '$categoryPath'."
+  }
+  if ($categoriesByReason.ContainsKey($categoryReason)) {
+   throw "Duplicate absence reason '$categoryReason' in '$categoryPath'."
+  }
+  $categoriesByReason[$categoryReason] = $categoryName
+ }
+ if (-not $categoriesByReason.ContainsKey('Release')) {
+  throw "The default Release category mapping is missing from '$categoryPath'."
+ }
+
  $membersByName = @{}
  foreach ($member in $CalendarMembers) {
   foreach ($memberName in @(Get-MemberMatchNames -Member $member)) {
@@ -165,8 +183,16 @@ function Add-MissingAbsenceEvents {
   if (-not $displayName -or -not $lastInitial) {
    throw "Calendar member '$name' is missing a first name or NameLastInitial."
   }
+  $categoryReason = ($reason -replace '\s+', ' ').Trim()
+  if ($categoriesByReason.ContainsKey($categoryReason)) {
+   $category = $categoriesByReason[$categoryReason]
+  }
+  else {
+   $category = $categoriesByReason['Release']
+   Write-Warning "No category mapping for absence reason '$reason'; using the Release category '$category'."
+  }
   $memberFirstName = if ($firstName) { $firstName } else { $preferredName }
-  [pscustomobject]@{ Subject = "$displayName $lastInitial - $reason"; Date = $absenceDate.Date; MemberName = "$(([string]$member.NameLast).Trim()), $memberFirstName" }
+  [pscustomobject]@{ Subject = "$displayName $lastInitial - $reason"; Date = $absenceDate.Date; MemberName = "$(([string]$member.NameLast).Trim()), $memberFirstName"; Category = $category }
  }
 
  $subjects = @{}
@@ -215,14 +241,18 @@ function Add-MissingAbsenceEvents {
   $msg = $MyInvocation.MyCommand.Name, $email, ($subject, $start.DateTime, $end.DateTime -join ' | ')
   Write-Host ('{0},{1},{2}' -f $msg) -ForegroundColor Yellow
   New-MgUserEvent -UserId $Email -Subject $subject -Start $start -End $end -IsAllDay -ShowAs 'free' -WhatIf:$WhatIf -ErrorAction Stop
+  # New-MgUserEvent -UserId $Email -Subject $subject -Start $start -End $end -IsAllDay -ShowAs 'free' -Categories @($item.Category) -WhatIf:$WhatIf -ErrorAction Stop
  }
 }
 # =======================================================================
 Import-Module CommonScriptFunctions
+Show-BlockInfo Start
 Import-Module dbatools
 Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph
 Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent, Remove-MgUserEvent
 
+
+Show-BlockInfo Main
 # App-only auth: the app registration needs admin-consented Application permissions (User.Read.All, GroupMember.Read.All, Calendars.ReadWrite)
 Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $GraphCredential -NoWelcome
 
@@ -235,9 +265,12 @@ $startDate = [datetime]::Today
 $endDate = (Get-Date).AddYears(1)
 
 $absenceRows = Get-Absences -apiKey $FrontlineApiKey -reportId $ReportId -startDate $startDate -endDate $EndDate
-$absenceRows | Select-Object -Property absence_reason -Unique
+# $absenceRows | Select-Object -Property absence_reason -Unique
 $calendarEvents = Get-CalendarEvents -email $CalendarEmail -startDate $startDate -endDate $EndDate
 
 $events = Select-Absences -calendarMembers $calendarMembers -absences $absenceRows
 Add-MissingAbsenceEvents -Email $CalendarEmail -Absences @($events | Where-Object { $null -ne $_ } | ForEach-Object { $_.Group }) -CalendarMembers $calendarMembers -CalendarEvents $calendarEvents -WhatIf:$WhatIf
+
 Disconnect-MgGraph | Out-Null
+
+Show-BlockInfo End

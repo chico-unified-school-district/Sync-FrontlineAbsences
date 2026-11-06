@@ -8,7 +8,6 @@ JobCategoryDescr
 FROM vwHREmploymentList
 WHERE
 EmploymentStatusIsActive = 1
-  -- AND NameLast = 'Cooper'
   AND (
         (SiteId = 540 AND JobCategoryDescr <> 'Instructional Assistance')
      OR (SiteId = 570 AND JobCategoryDescr = 'Clerical')
