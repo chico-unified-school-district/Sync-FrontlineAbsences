@@ -254,7 +254,7 @@ Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUse
 
 Show-BlockInfo Main
 # App-only auth: the app registration needs admin-consented Application permissions (User.Read.All, GroupMember.Read.All, Calendars.ReadWrite)
-Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $GraphCredential -NoWelcome
+
 
 $sqlInstance = Connect-DbaInstance -SqlInstance $SqlServer -SqlCredential $SqlCredential -Database $SqlDatabase
 $membersSql = Get-Content '.\sql\get-it-staff.sql' -Raw
@@ -262,15 +262,27 @@ $calendarMembers = Invoke-DbaQuery -SqlInstance $sqlInstance -Query $membersSql
 # $calendarMembers
 
 $startDate = [datetime]::Today
-$endDate = (Get-Date).AddYears(1)
+# $endDate = (Get-Date).AddYears(1)
 
-$absenceRows = Get-Absences -apiKey $FrontlineApiKey -reportId $ReportId -startDate $startDate -endDate $EndDate
-# $absenceRows | Select-Object -Property absence_reason -Unique
-$calendarEvents = Get-CalendarEvents -email $CalendarEmail -startDate $startDate -endDate $EndDate
+$stopTime = Get-Date '4:00PM'
+$delay = 14400 # 4 hours in seconds
+if (!$WhatIf) { Write-Host "Running every $($delay /60 /60) hours until $($stopTime.ToString('h:mm tt'))..." -F Green }
 
-$events = Select-Absences -calendarMembers $calendarMembers -absences $absenceRows
-Add-MissingAbsenceEvents -Email $CalendarEmail -Absences @($events | Where-Object { $null -ne $_ } | ForEach-Object { $_.Group }) -CalendarMembers $calendarMembers -CalendarEvents $calendarEvents -WhatIf:$WhatIf
+do {
+ $absenceRows = Get-Absences -apiKey $FrontlineApiKey -reportId $ReportId -startDate $startDate -endDate $EndDate
+ # $absenceRows | Select-Object -Property absence_reason -Unique
 
-Disconnect-MgGraph | Out-Null
+ Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $GraphCredential -NoWelcome
+ $calendarEvents = Get-CalendarEvents -email $CalendarEmail -startDate $startDate -endDate $EndDate
+
+ $events = Select-Absences -calendarMembers $calendarMembers -absences $absenceRows
+ Add-MissingAbsenceEvents -Email $CalendarEmail -Absences @($events | Where-Object { $null -ne $_ } | ForEach-Object { $_.Group }) -CalendarMembers $calendarMembers -CalendarEvents $calendarEvents -WhatIf:$WhatIf
+
+ Disconnect-MgGraph | Out-Null
+
+ if ($WhatIf) { break }
+ Start-Sleep -Seconds $delay
+
+} until ((Get-Date) -lt $stopTime)
 
 Show-BlockInfo End

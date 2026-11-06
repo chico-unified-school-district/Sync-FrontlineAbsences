@@ -10,7 +10,7 @@ This PowerShell script retrieves absence-report rows from Frontline, selects emp
 - A Microsoft Entra app registration with an admin-consented Microsoft Graph **application** permission for calendar access, such as `Calendars.ReadWrite`, and access to the target mailbox under any applicable Exchange access policy. `CalendarEmail` must identify a user or shared mailbox accessible via the Graph user calendar API; a Microsoft 365 group calendar uses a different API.
 - The target mailbox and the machine running the script must support the `Pacific Standard Time` time-zone identifier.
 
-The script imports `CommonScriptFunctions` but does not call any of its functions directly. Make sure the module is installed in the environment or adjust the import to match your deployment.
+The script calls `Show-BlockInfo` from `CommonScriptFunctions` at startup, before the main process, and at the end.
 
 ## Parameters
 
@@ -18,7 +18,7 @@ The script imports `CommonScriptFunctions` but does not call any of its function
 | ----------------- | -------------------------------------------------------------------------------------------------- |
 | `FrontlineApiKey` | Frontline web-service key.                                                                         |
 | `ReportId`        | Frontline Report Writer template ID.                                                               |
-| `EndDate`         | Declared by the script, but currently overwritten during execution; see the date-range note below. |
+| `EndDate`         | Inclusive end date for the Frontline and calendar queries.                                         |
 | `TenantId`        | Microsoft Entra tenant ID.                                                                         |
 | `GraphCredential` | `PSCredential` whose username is the app client ID and whose password is the client secret.        |
 | `CalendarEmail`   | Address of the user or shared mailbox whose default calendar is used.                              |
@@ -29,7 +29,7 @@ The script imports `CommonScriptFunctions` but does not call any of its function
 
 These parameters are not marked mandatory, but the connections and report request require valid values. Do not store keys or passwords in the script or commit them to source control.
 
-**Date range:** The current script sets the start to the machine's local today and the end to one year from the current time, overriding `EndDate` even if it is supplied. Both the Frontline filter and the calendar query use the resulting dates as an inclusive range. To change the range, edit the assignments near the bottom of the script.
+**Date range:** The script sets the start to the machine's local date at startup and uses the supplied `EndDate` as the inclusive end date. Supply `EndDate` explicitly; it has no usable default. The start date is fixed for the duration of the process.
 
 ## Run
 
@@ -45,6 +45,7 @@ $sqlCredential = Get-Credential -Message 'Enter the SQL login'
 $params = @{
     FrontlineApiKey = $frontlineKey
     ReportId        = 123456
+    EndDate         = (Get-Date).Date.AddYears(1)
     TenantId        = 'your-tenant-id'
     GraphCredential = $graphCredential
     CalendarEmail   = 'calendar@example.org'
@@ -59,6 +60,14 @@ $params = @{
 Replace the example values with your own. `Read-Host` displays the Frontline key as it is entered; use an approved secret-management method when running in a shared or automated environment. Review the preview before running the same command without `-WhatIf`.
 
 `-WhatIf` applies to event creation only. The script still connects to Graph and SQL Server, retrieves Frontline data, and reads the calendar. Do not assume it makes the entire process offline or prevents all other side effects.
+
+## Schedule and repeat runs
+
+The script queries SQL once at startup, then fetches Frontline and calendar data and attempts synchronization in a loop. A `-WhatIf` run performs one iteration and exits without sleeping.
+
+Without `-WhatIf`, the script sleeps for four hours after each iteration. **The current loop condition is inverted:** it exits after the sleep if the current time is *before* the 4:00 PM stop time, and continues if the time is at or after 4:00 PM. For example, a run whose first sleep ends before 4:00 PM exits after one iteration; a run reaching the check at or after 4:00 PM keeps repeating until stopped. The stop time is fixed at startup, so it does not reset the next day. Do not rely on the printed "until 4:00 PM" message as the actual stopping behavior.
+
+The employee list and start date are not refreshed during the loop. Changes to SQL membership require restarting the process.
 
 ## Matching and event creation
 
