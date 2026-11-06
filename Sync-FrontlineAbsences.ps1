@@ -248,8 +248,8 @@ function Add-MissingAbsenceEvents {
 Import-Module CommonScriptFunctions
 Show-BlockInfo Start
 Import-Module dbatools
-Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph
-Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent, Remove-MgUserEvent
+# Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph
+# Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent, Remove-MgUserEvent
 
 Show-BlockInfo Main
 # App-only auth: the app registration needs admin-consented Application permissions (User.Read.All, GroupMember.Read.All, Calendars.ReadWrite)
