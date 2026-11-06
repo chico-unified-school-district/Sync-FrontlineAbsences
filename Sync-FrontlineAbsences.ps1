@@ -267,14 +267,14 @@ $delay = 14400 # 4 hours in seconds
 if (!$WhatIf) { Write-Host "Running every $($delay /60 /60) hours until $($stopTime.ToString('h:mm tt'))..." -F Green }
 
 do {
- $absenceRows = Get-Absences -apiKey $FrontlineApiKey -reportId $ReportId -startDate $startDate -endDate $EndDate
+ # $absenceRows = Get-Absences -apiKey $FrontlineApiKey -reportId $ReportId -startDate $startDate -endDate $EndDate
  # $absenceRows | Select-Object -Property absence_reason -Unique
 
  Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $GraphCredential -NoWelcome
- $calendarEvents = Get-CalendarEvents -email $CalendarEmail -startDate $startDate -endDate $EndDate
+ # $calendarEvents = Get-CalendarEvents -email $CalendarEmail -startDate $startDate -endDate $EndDate
 
- $events = Select-Absences -calendarMembers $calendarMembers -absences $absenceRows
- Add-MissingAbsenceEvents -Email $CalendarEmail -Absences @($events | Where-Object { $null -ne $_ } | ForEach-Object { $_.Group }) -CalendarMembers $calendarMembers -CalendarEvents $calendarEvents -WhatIf:$WhatIf
+ # $events = Select-Absences -calendarMembers $calendarMembers -absences $absenceRows
+ # Add-MissingAbsenceEvents -Email $CalendarEmail -Absences @($events | Where-Object { $null -ne $_ } | ForEach-Object { $_.Group }) -CalendarMembers $calendarMembers -CalendarEvents $calendarEvents -WhatIf:$WhatIf
 
  Disconnect-MgGraph | Out-Null
 
