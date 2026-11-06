@@ -251,10 +251,8 @@ Import-Module dbatools
 Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph
 Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent, Remove-MgUserEvent
 
-
 Show-BlockInfo Main
 # App-only auth: the app registration needs admin-consented Application permissions (User.Read.All, GroupMember.Read.All, Calendars.ReadWrite)
-
 
 $sqlInstance = Connect-DbaInstance -SqlInstance $SqlServer -SqlCredential $SqlCredential -Database $SqlDatabase
 $membersSql = Get-Content '.\sql\get-it-staff.sql' -Raw
