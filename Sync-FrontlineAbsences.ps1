@@ -12,6 +12,8 @@ param(
  [string]$SqlDatabase,
  [Alias('wi')][switch]$WhatIf
 )
+Import-Module Microsoft.Graph.Authentication -Force
+Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $GraphCredential -NoWelcome
 
 function Get-Absences {
  param(
@@ -245,10 +247,9 @@ function Add-MissingAbsenceEvents {
  }
 }
 # =======================================================================
-Import-Module CommonScriptFunctions
 Show-BlockInfo Start
+Import-Module CommonScriptFunctions
 Import-Module dbatools
-Import-Module Microsoft.Graph.Authentication -RequiredVersion 2.41.2 -Force
 # Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph
 # Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent, Remove-MgUserEvent
 
@@ -271,17 +272,17 @@ do {
  # $absenceRows = Get-Absences -apiKey $FrontlineApiKey -reportId $ReportId -startDate $startDate -endDate $EndDate
  # $absenceRows | Select-Object -Property absence_reason -Unique
 
- Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $GraphCredential -NoWelcome
+ # Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $GraphCredential -NoWelcome
  # $calendarEvents = Get-CalendarEvents -email $CalendarEmail -startDate $startDate -endDate $EndDate
 
  # $events = Select-Absences -calendarMembers $calendarMembers -absences $absenceRows
  # Add-MissingAbsenceEvents -Email $CalendarEmail -Absences @($events | Where-Object { $null -ne $_ } | ForEach-Object { $_.Group }) -CalendarMembers $calendarMembers -CalendarEvents $calendarEvents -WhatIf:$WhatIf
 
- Disconnect-MgGraph | Out-Null
 
  if ($WhatIf) { break }
  Start-Sleep -Seconds $delay
 
 } until ((Get-Date) -lt $stopTime)
 
+Disconnect-MgGraph | Out-Null
 Show-BlockInfo End
