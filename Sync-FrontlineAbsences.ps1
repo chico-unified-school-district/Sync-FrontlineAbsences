@@ -95,6 +95,18 @@ function Get-CalendarEvents {
  $Events
 }
 
+function Get-MemberMatchNames {
+ param($Member)
+
+ $lastName = ([string]$Member.NameLast).Trim()
+ $firstName = ([string]$Member.NameFirst).Trim()
+ $preferredName = ([string]$Member.NameFirstPreferred).Trim()
+ if ($lastName) {
+  if ($firstName) { "$lastName, $firstName" }
+  if ($preferredName -and $preferredName -ne $firstName) { "$lastName, $preferredName" }
+ }
+}
+
 function Select-Absences {
  param(
   [array]$calendarMembers,
@@ -102,17 +114,12 @@ function Select-Absences {
  )
 
  $SelectedAbsences = foreach ($Member in $calendarMembers) {
-  $lastName = ([string]$Member.NameLast).Trim()
-  $firstName = ([string]$Member.NameFirst).Trim()
-  $preferredName = ([string]$Member.NameFirstPreferred).Trim()
-  if (-not $lastName -or (-not $firstName -and -not $preferredName)) {
+  $names = @(Get-MemberMatchNames -Member $Member)
+  if (-not $names.Count) {
    Write-Warning "Skipping calendar member with incomplete name (employee ID: $($Member.empid))."
    continue
   }
 
-  $names = @()
-  if ($firstName) { $names += "$lastName, $firstName" }
-  if ($preferredName) { $names += "$lastName, $preferredName" }
   $MemberAbsences = $absences | Where-Object { ([string]$_.employee_full_name).Trim() -in $names }
   $MemberAbsences
  }
@@ -126,9 +133,18 @@ function Add-MissingAbsenceEvents {
  param(
   [string]$Email,
   [array]$Absences,
+  [array]$CalendarMembers,
   [array]$CalendarEvents,
   [switch]$WhatIf
  )
+
+ $membersByName = @{}
+ foreach ($member in $CalendarMembers) {
+  foreach ($memberName in @(Get-MemberMatchNames -Member $member)) {
+   if (-not $membersByName.ContainsKey($memberName)) { $membersByName[$memberName] = [System.Collections.Generic.List[object]]::new() }
+   $membersByName[$memberName].Add($member)
+  }
+ }
 
  $candidates = foreach ($absence in $Absences) {
   $name = ([string]$absence.employee_full_name).Trim()
@@ -138,7 +154,19 @@ function Add-MissingAbsenceEvents {
    -not [datetime]::TryParseExact([string]$absence.date, [string[]]@('M/d/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd'), [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::None, [ref]$absenceDate)) {
    throw 'An absence is missing a valid employee name, absence reason, or date.'
   }
-  [pscustomobject]@{ Subject = "$name - $reason"; Date = $absenceDate.Date }
+  if (-not $membersByName.ContainsKey($name) -or $membersByName[$name].Count -ne 1) {
+   throw "Cannot uniquely match absence employee '$name' to a calendar member."
+  }
+  $member = $membersByName[$name][0]
+  $firstName = ([string]$member.NameFirst).Trim()
+  $preferredName = ([string]$member.NameFirstPreferred).Trim()
+  $displayName = if ($preferredName) { $preferredName } else { $firstName }
+  $lastInitial = ([string]$member.NameLastInitial).Trim()
+  if (-not $displayName -or -not $lastInitial) {
+   throw "Calendar member '$name' is missing a first name or NameLastInitial."
+  }
+  $memberFirstName = if ($firstName) { $firstName } else { $preferredName }
+  [pscustomobject]@{ Subject = "$displayName $lastInitial - $reason"; Date = $absenceDate.Date; MemberName = "$(([string]$member.NameLast).Trim()), $memberFirstName" }
  }
 
  $subjects = @{}
@@ -160,10 +188,16 @@ function Add-MissingAbsenceEvents {
   $eventRanges[$subject].Add([pscustomobject]@{ Start = $eventStart; End = $eventEnd })
  }
 
- $selected = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+ $selected = @{}
  $pending = foreach ($candidate in $candidates) {
   $key = "$($candidate.Date.ToString('yyyy-MM-dd'))|$($candidate.Subject)"
-  if (-not $selected.Add($key)) { continue }
+  if ($selected.ContainsKey($key)) {
+   if ($selected[$key] -ne $candidate.MemberName) {
+    throw "Multiple calendar members have the same event subject and date: '$($candidate.Subject)' on $($candidate.Date.ToString('yyyy-MM-dd'))."
+   }
+   continue
+  }
+  $selected[$key] = $candidate.MemberName
   $match = $false
   foreach ($range in $eventRanges[$candidate.Subject]) {
    if ($range.Start -lt $candidate.Date.AddDays(1) -and $range.End -gt $candidate.Date) {
@@ -205,5 +239,5 @@ $absenceRows | Select-Object -Property absence_reason -Unique
 $calendarEvents = Get-CalendarEvents -email $CalendarEmail -startDate $startDate -endDate $EndDate
 
 $events = Select-Absences -calendarMembers $calendarMembers -absences $absenceRows
-Add-MissingAbsenceEvents -Email $CalendarEmail -Absences @($events | Where-Object { $null -ne $_ } | ForEach-Object { $_.Group }) -CalendarEvents $calendarEvents -WhatIf:$WhatIf
+Add-MissingAbsenceEvents -Email $CalendarEmail -Absences @($events | Where-Object { $null -ne $_ } | ForEach-Object { $_.Group }) -CalendarMembers $calendarMembers -CalendarEvents $calendarEvents -WhatIf:$WhatIf
 Disconnect-MgGraph | Out-Null
