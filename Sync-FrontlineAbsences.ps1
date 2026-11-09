@@ -12,7 +12,8 @@ param(
  [string]$SqlDatabase,
  [Alias('wi')][switch]$WhatIf
 )
-Import-Module Microsoft.Graph.Authentication -Force
+Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph -Force
+Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent, Remove-MgUserEvent -Force
 Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $GraphCredential -NoWelcome
 
 function Get-Absences {
@@ -246,12 +247,11 @@ function Add-MissingAbsenceEvents {
   # New-MgUserEvent -UserId $Email -Subject $subject -Start $start -End $end -IsAllDay -ShowAs 'free' -Categories @($item.Category) -WhatIf:$WhatIf -ErrorAction Stop
  }
 }
+
 # =======================================================================
 Show-BlockInfo Start
 Import-Module CommonScriptFunctions
 Import-Module dbatools
-# Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph
-# Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent, Remove-MgUserEvent
 
 Show-BlockInfo Main
 # App-only auth: the app registration needs admin-consented Application permissions (User.Read.All, GroupMember.Read.All, Calendars.ReadWrite)
