@@ -272,11 +272,11 @@ do {
  $absenceRows = Get-Absences -apiKey $FrontlineApiKey -reportId $ReportId -startDate $startDate -endDate $EndDate
  # # # $absenceRows | Select-Object -Property absence_reason -Unique
 
- Connect-MgGraph -TenantId $TenantId -ClientSecretCredential $GraphCredential -NoWelcome
  $calendarEvents = Get-CalendarEvents -email $CalendarEmail -startDate $startDate -endDate $EndDate
 
  $events = Select-Absences -calendarMembers $calendarMembers -absences $absenceRows
- Add-MissingAbsenceEvents -Email $CalendarEmail -Absences @($events | Where-Object { $null -ne $_ } | ForEach-Object { $_.Group }) -CalendarMembers $calendarMembers -CalendarEvents $calendarEvents -WhatIf:$WhatIf
+ $absences = @($events | Where-Object { $null -ne $_ } | ForEach-Object { $_.Group })
+ Add-MissingAbsenceEvents -Email $CalendarEmail -Absences $absences -CalendarMembers $calendarMembers -CalendarEvents $calendarEvents -WhatIf:$WhatIf
 
  if ($WhatIf) { break }
  Start-Sleep -Seconds $delay
