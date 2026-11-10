@@ -1,15 +1,15 @@
 # https://www.aesoponline.com/webservices/dataextract.asmx?op=GetData
 [CmdletBinding()]
 param(
- [string]$FrontlineApiKey,
- [int]$ReportId,
- [datetime]$EndDate,
- [string]$TenantId,
- [PSCredential]$GraphCredential,  # UserName = Entra app client ID, Password = client secret
- [string]$CalendarEmail,  # Shared group availability calendar mailbox
- [string]$SqlServer,
- [PSCredential]$SqlCredential,
- [string]$SqlDatabase,
+ [Parameter(Mandatory)][string]$FrontlineApiKey,
+ [Parameter(Mandatory)][int]$ReportId,
+ [Parameter(Mandatory)][datetime]$EndDate,
+ [Parameter(Mandatory)][string]$TenantId,
+ [Parameter(Mandatory)][PSCredential]$GraphCredential,  # UserName = Entra app client ID, Password = client secret
+ [Parameter(Mandatory)][string]$CalendarEmail,  # Shared group availability calendar mailbox
+ [Parameter(Mandatory)][string]$SqlServer,
+ [Parameter(Mandatory)][PSCredential]$SqlCredential,
+ [Parameter(Mandatory)][string]$SqlDatabase,
  [Alias('wi')][switch]$WhatIf
 )
 Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph -Force
@@ -265,12 +265,12 @@ $startDate = [datetime]::Today
 # $endDate = (Get-Date).AddYears(1)
 
 $stopTime = Get-Date '4:00PM'
-$delay = 14400 # 4 hours in seconds
+$delay = 3600 # 1 hour in seconds
 if (!$WhatIf) { Write-Host "Running every $($delay /60 /60) hours until $($stopTime.ToString('h:mm tt'))..." -F Green }
 
 do {
  $absenceRows = Get-Absences -apiKey $FrontlineApiKey -reportId $ReportId -startDate $startDate -endDate $EndDate
- # # # $absenceRows | Select-Object -Property absence_reason -Unique
+ # $absenceRows | Select-Object -Property absence_reason -Unique
 
  $calendarEvents = Get-CalendarEvents -email $CalendarEmail -startDate $startDate -endDate $EndDate
 

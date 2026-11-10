@@ -27,7 +27,7 @@ The script calls `Show-BlockInfo` from `CommonScriptFunctions` at startup, befor
 | `SqlDatabase`     | Employee database name.                                                                            |
 | `WhatIf`          | Preview event creation rather than creating events; alias `wi`.                                    |
 
-These parameters are not marked mandatory, but the connections and report request require valid values. Do not store keys or passwords in the script or commit them to source control.
+All parameters except `WhatIf` are mandatory. Pass the required values explicitly or through a parameter hashtable. Do not store keys or passwords in the script or commit them to source control.
 
 **Date range:** The script sets the start to the machine's local date at startup and uses the supplied `EndDate` as the inclusive end date. Supply `EndDate` explicitly; it has no usable default. The start date is fixed for the duration of the process.
 
@@ -65,7 +65,7 @@ Replace the example values with your own. `Read-Host` displays the Frontline key
 
 The script queries SQL once at startup, then fetches Frontline and calendar data and attempts synchronization in a loop. A `-WhatIf` run performs one iteration and exits without sleeping.
 
-Without `-WhatIf`, the script sleeps for four hours after each iteration. **The current loop condition is inverted:** it exits after the sleep if the current time is *before* the 4:00 PM stop time, and continues if the time is at or after 4:00 PM. For example, a run whose first sleep ends before 4:00 PM exits after one iteration; a run reaching the check at or after 4:00 PM keeps repeating until stopped. The stop time is fixed at startup, so it does not reset the next day. Do not rely on the printed "until 4:00 PM" message as the actual stopping behavior.
+Without `-WhatIf`, the script sleeps for one hour after each iteration. **The current loop condition is inverted:** it exits after the sleep if the current time is *before* the 4:00 PM stop time, and continues if the time is at or after 4:00 PM. For example, a run whose first sleep ends before 4:00 PM exits after one iteration; a run reaching the check at or after 4:00 PM keeps repeating until stopped. The stop time is fixed at startup, so it does not reset the next day. Do not rely on the printed "until 4:00 PM" message as the actual stopping behavior.
 
 The employee list and start date are not refreshed during the loop. Changes to SQL membership require restarting the process.
 
