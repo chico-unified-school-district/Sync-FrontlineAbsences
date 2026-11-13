@@ -1,6 +1,6 @@
 # Sync Frontline Absences
 
-This PowerShell script retrieves absence-report rows from Frontline, selects employees returned by a SQL query, and creates missing all-day events in an Outlook mailbox calendar through Microsoft Graph.
+This PowerShell script retrieves absence-report rows from Frontline, selects employees returned by a SQL query, and creates missing events in an Outlook mailbox calendar through Microsoft Graph. Absences without start and end times become all-day events; absences with valid start and end times become timed events.
 
 ## Prerequisites
 
@@ -65,7 +65,7 @@ Replace the example values with your own. `Read-Host` displays the Frontline key
 
 The script queries SQL once at startup, then fetches Frontline and calendar data and attempts synchronization in a loop. A `-WhatIf` run performs one iteration and exits without sleeping.
 
-Without `-WhatIf`, the script sleeps for one hour after each iteration. **The current loop condition is inverted:** it exits after the sleep if the current time is *before* the 4:00 PM stop time, and continues if the time is at or after 4:00 PM. For example, a run whose first sleep ends before 4:00 PM exits after one iteration; a run reaching the check at or after 4:00 PM keeps repeating until stopped. The stop time is fixed at startup, so it does not reset the next day. Do not rely on the printed "until 4:00 PM" message as the actual stopping behavior.
+Without `-WhatIf`, the script sleeps for one hour between iterations, unless the next sleep would reach or pass 4:00 PM. It then exits without sleeping. A run started at or after 4:00 PM still performs its first sync pass before exiting. The stop time is fixed at startup, so it does not reset the next day.
 
 The employee list and start date are not refreshed during the loop. Changes to SQL membership require restarting the process.
 
@@ -73,16 +73,16 @@ The employee list and start date are not refreshed during the loop. Changes to S
 
 1. The SQL query selects calendar members. A Frontline `employee_full_name` matches a member's `NameLast, NameFirst` or `NameLast, NameFirstPreferred`, ignoring case and trimming surrounding whitespace.
 2. The event subject is `First LastInitial - absence_reason`. The preferred first name is used when present; otherwise, the first name is used.
-3. Existing calendar events are compared by subject and overlapping Pacific calendar date. A match is skipped. Duplicate rows for the same member, subject, and date are also skipped. Ambiguous member matches or subject/date collisions between different members stop the run.
-4. Missing events are created as all-day events in Pacific time with availability set to **Free**. The script creates missing events only; it does not update or delete existing events.
+3. Existing calendar events are compared by exact subject and exact start and end times. A matching event is skipped; an event that merely overlaps in time is not considered a match. Duplicate absence rows producing the same subject and time range are skipped. Ambiguous employee matches or identical event subjects and time ranges for different members stop the run.
+4. Missing events are created in Pacific time with availability set to **Free**. Absences with no times are all-day events; otherwise, both start and end times must be valid, and the end must be later than the start. The script creates missing events only; it does not update or delete existing events.
 
-The comparison does not use a confirmation number. An existing event with an older subject format will not match the current subject, so the script may create another event. Name-based matching can also be ambiguous when employees share names.
+The comparison does not use a confirmation number. An existing event with an older subject format or a different time range will not match, so the script may create another event. Name-based matching can also be ambiguous when employees share names.
 
 ## Categories
 
-[lib/color_categories.csv](lib/color_categories.csv) maps `absence_reason` to `default_category`. The script reads and validates the mappings, normalizing whitespace when comparing reasons. If a reason is not mapped, it warns and uses the `Release` mapping, currently `Blue Category`; the `Release` mapping must be present.
+[lib/color_categories.csv](lib/color_categories.csv) maps `absence_reason` to `default_category`. The script reads and validates the mappings, normalizing whitespace when comparing reasons. If a reason is not mapped, it warns and uses the `Release` mapping, currently `Blue Category`; the `Release` mapping must be present. The mapped category name is included when creating an event.
 
-**Category assignment is currently disabled:** the active `New-MgUserEvent` call does not include `-Categories`. A commented-out alternative includes it. If category assignment is enabled, verify that the named categories exist in the target mailbox and have the desired colors; the CSV's `color` and `graph_preset` columns are not applied by the script. Existing events are not updated.
+The CSV's `color` and `graph_preset` columns are not applied by the script. Existing events are not updated.
 
 ## Troubleshooting
 
