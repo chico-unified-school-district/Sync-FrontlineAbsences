@@ -12,10 +12,11 @@ param(
  [Parameter(Mandatory)][string]$SqlDatabase,
  [Alias('wi')][switch]$WhatIf
 )
-Import-Module CommonScriptFunctions
-Import-Module dbatools
 Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph -Force
 Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent -Force
+Import-Module CommonScriptFunctions
+Import-Module dbatools
+
 # =======================================================================
 # Constants
 # =======================================================================
