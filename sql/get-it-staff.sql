@@ -9,7 +9,6 @@ JobCategoryDescr
 FROM vwHREmploymentList
 WHERE
 EmploymentStatusIsActive = 1
--- AND empid = 1459
   AND (
         (SiteId = 540 AND JobCategoryDescr <> 'Instructional Assistance')
      OR (SiteId = 570 AND JobCategoryDescr = 'Clerical')
