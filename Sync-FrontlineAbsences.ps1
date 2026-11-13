@@ -12,11 +12,10 @@ param(
  [Parameter(Mandatory)][string]$SqlDatabase,
  [Alias('wi')][switch]$WhatIf
 )
-
-Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph -Force
-Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent -Force
 Import-Module CommonScriptFunctions
 Import-Module dbatools
+Import-Module Microsoft.Graph.Authentication -Cmdlet Connect-MgGraph, Disconnect-MgGraph -Force
+Import-Module Microsoft.Graph.Calendar -Cmdlet Get-MgUserCalendarView, New-MgUserEvent -Force
 # =======================================================================
 # Constants
 # =======================================================================
@@ -24,6 +23,7 @@ $PacificTimeZoneId = 'Pacific Standard Time'
 $FrontlineEndpoint = 'https://absence.frontlineeducation.com/webservices/dataextract.asmx/GetData'
 $FallbackReason = 'Release'   # absence reason whose category is used when a reason has no mapping
 $PollSeconds = 3600          # 1 hour
+$AllDayThresholdHours = 7     # absences of this many hours or more become all-day events
 
 # =======================================================================
 # Generic helpers (pure)
@@ -121,6 +121,18 @@ function ConvertFrom-FrontlineXml {
  $pairs | Group-Object -Property Name -AsHashTable -AsString
 }
 
+# SQL row (DataRow) -> plain object with trimmed strings, so later steps never touch DataRow/DBNull quirks
+function ConvertTo-CalendarMember {
+ param($Row)
+ [pscustomobject]@{
+  empid              = ([string]$Row.empid).Trim()
+  NameLast           = ([string]$Row.NameLast).Trim()
+  NameFirst          = ([string]$Row.NameFirst).Trim()
+  NameFirstPreferred = ([string]$Row.NameFirstPreferred).Trim()
+  NameLastInitial    = ([string]$Row.NameLastInitial).Trim()
+ }
+}
+
 function ConvertTo-AbsenceDate {
  param([string]$Text)
  $parsed = [datetime]::MinValue
@@ -155,16 +167,30 @@ function ConvertTo-AbsenceCandidate {
    throw 'An absence is missing a valid employee name, absence reason, or date.'
   }
 
-  $found = if ($MemberIndex.ContainsKey($name)) { @($MemberIndex[$name]) } else { @() }
-  if ($found.Count -ne 1) { throw "Cannot uniquely match absence employee '$name' to a calendar member." }
-  $member = $found[0].Member
+  # The member query returns one row per job, so identical people appear more than once.
+  # Rows count as one person when they share an empid (if the query returns it) or the same name fields.
+  $nameMatches = if ($MemberIndex.ContainsKey($name)) { @($MemberIndex[$name] | ForEach-Object { $_.Member }) } else { @() }
+  $found = @(
+   $nameMatches |
+    Group-Object -Property { if ($_.empid) { "id:$($_.empid)" } else { "$($_.NameLast)|$($_.NameFirst)|$($_.NameFirstPreferred)" } } |
+     ForEach-Object { $_.Group | Select-Object -First 1 }
+  )
+  if ($found.Count -ne 1) {
+   throw "Cannot uniquely match absence employee '$name' to a calendar member ($($found.Count) distinct match(es))."
+  }
+  $member = $found[0]
 
   $first = ([string]$member.NameFirst).Trim()
   $preferred = ([string]$member.NameFirstPreferred).Trim()
   $lastInitial = ([string]$member.NameLastInitial).Trim()
+  if (-not $lastInitial) {
+   # The SQL didn't supply NameLastInitial: build it from NameLast ("Brock" -> "B.")
+   $lastName = ([string]$member.NameLast).Trim()
+   if ($lastName) { $lastInitial = "$($lastName.Substring(0, 1))." }
+  }
   $displayName = if ($preferred) { $preferred } else { $first }
   if (-not $displayName -or -not $lastInitial) {
-   throw "Calendar member '$name' is missing a first name or NameLastInitial."
+   throw "Calendar member '$name' is missing a first name or last name (NameFirst='$first', NameFirstPreferred='$preferred', NameLast='$(([string]$member.NameLast).Trim())', NameLastInitial='$lastInitial'; member object type: $(if ($null -eq $member) { 'null' } else { $member.GetType().FullName }))."
   }
 
   $reasonKey = ConvertTo-NormalizedText -Text $reason
@@ -189,8 +215,16 @@ function ConvertTo-AbsenceCandidate {
    if ($null -eq $startTime -or $null -eq $endTime -or $endTime -le $startTime) {
     throw "Absence for '$name' on $($date.ToString('yyyy-MM-dd')) has an invalid time range ('$startText' to '$endText')."
    }
-   $start = $date + $startTime
-   $end = $date + $endTime
+   if (($endTime - $startTime) -ge [timespan]::FromHours($AllDayThresholdHours)) {
+    # Long absences are shown as all-day events
+    $isAllDay = $true
+    $start = $date
+    $end = $date.AddDays(1)
+   }
+   else {
+    $start = $date + $startTime
+    $end = $date + $endTime
+   }
   }
 
   [pscustomobject]@{
@@ -408,7 +442,8 @@ $categoryMap = Import-CategoryMap -Path (Join-Path $PSScriptRoot 'lib\color_cate
 
 $sqlInstance = Connect-DbaInstance -SqlInstance $SqlServer -SqlCredential $SqlCredential -Database $SqlDatabase
 $memberIndex = New-MemberIndex -Members @(
- Invoke-DbaQuery -SqlInstance $sqlInstance -Query (Get-Content (Join-Path $PSScriptRoot 'sql\get-it-staff.sql') -Raw)
+ Invoke-DbaQuery -SqlInstance $sqlInstance -Query (Get-Content (Join-Path $PSScriptRoot 'sql\get-it-staff.sql') -Raw) |
+  ForEach-Object { ConvertTo-CalendarMember -Row $_ }
 )
 
 $syncArgs = @{
